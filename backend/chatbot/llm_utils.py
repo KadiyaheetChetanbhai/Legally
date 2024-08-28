@@ -1,23 +1,30 @@
-from langchain.chains import SimpleChain
-from langchain.prompts import PromptTemplate
-from langchain.llms import HuggingFaceLLM
+from transformers import AutoTokenizer, AutoModel
+import torch
 
-# Load the LLaMA model (or another model of your choice)
-llm = HuggingFaceLLM(model_name="lisa/legal-bert-squad-law")
+# Load model and tokenizer
+tokenizer = AutoTokenizer.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
+model = AutoModel.from_pretrained("sentence-transformers/all-MiniLM-L6-v2")
 
-# Define a prompt template for legal queries
-prompt_template = PromptTemplate(
-    input_variables=["query"],
-    template="You are a legal expert. Based on this query: '{query}', provide the legal advice and relevant laws."
-)
+def embed_text_to_vector(text):
+    """
+    Converts text to a vector using a pre-trained transformer model.
 
-# Create a chain that runs the LLM with the given prompt template
-legal_chain = SimpleChain(
-    llm=llm,
-    prompt=prompt_template
-)
+    :param text: A string of text to embed.
+    :return: A tensor representing the embedded text.
+    """
+    # Encode text
+    encoded_input = tokenizer(text, padding=True, truncation=True, return_tensors='pt')
 
-def process_legal_query(query):
-    # Use the chain to process the legal query
-    response = legal_chain.run(query=query)
-    return response
+    # Compute token embeddings
+    with torch.no_grad():
+        model_output = model(**encoded_input)
+
+    # Perform mean pooling to get sentence vector
+    embeddings = model_output.last_hidden_state
+    attention_mask = encoded_input['attention_mask']
+    mask_expanded = attention_mask.unsqueeze(-1).expand(embeddings.size()).float()
+    sum_embeddings = torch.sum(embeddings * mask_expanded, 1)
+    sum_mask = torch.clamp(mask_expanded.sum(1), min=1e-9)
+    mean_pooled_embeddings = sum_embeddings / sum_mask
+
+    return mean_pooled_embeddings[0].numpy()  # Return as numpy array for compatibility with Pinecone

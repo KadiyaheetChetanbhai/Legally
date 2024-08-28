@@ -1,32 +1,36 @@
-
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from langchain.llms import HuggingFaceLLM
-import pinecone
-from .llm_utils import process_legal_query
-from .pinecone_utils import query_legal_cases
-from legal_chatbot.settings import PINECONE_API_KEY, PINECONE_ENV
+from .pinecone_utils import query_legal_cases  # This is your custom utility to query Pinecone
+from .llm_utils import embed_text_to_vector  # Function to embed text into vector
+from pinecone import Pinecone
+from legal_chatbot.settings import PINECONE_API_KEY
+import os
+# Initialize Pinecone
+pc = Pinecone(
+    api_key=PINECONE_API_KEY
+)
 
-
-
-# Initialize Pinecone and LangChain
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
-index = pinecone.Index("legal-knowledge")
-
-# Define LLaMA model via HuggingFace (you can replace this with your model)
-llm = HuggingFaceLLM(model_name="lisa/legal-bert-squad-law")
+index_name = 'legal-cases'  # Ensure this matches your index
 
 @api_view(['POST'])
-def legal_query(request):
-    user_query = request.data.get("query", "")
-    
-    # Process the query using LLaMA via LangChain
-    llm_response = process_legal_query(user_query)
-    
-    # Query Pinecone for related legal cases
-    pinecone_results = query_legal_cases(user_query)
-    
-    return Response({
-        "llm_response": llm_response,
-        "pinecone_results": pinecone_results
-    })
+def query_legal_info(request):
+    """
+    Handle a POST request with a legal query and return relevant legal information.
+    """
+    try:
+        # Extract the query text from the request
+        query_text = request.data.get('query')
+        if not query_text:
+            return JsonResponse({'error': 'Query text is required'}, status=400)
+
+        # Embed the query text into a vector
+        query_vector = embed_text_to_vector(query_text)
+
+        # Query Pinecone index for similar cases
+        response = query_legal_cases(pc, index_name, query_vector)
+
+        # Return the response
+        return JsonResponse({'result': response}, status=200)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

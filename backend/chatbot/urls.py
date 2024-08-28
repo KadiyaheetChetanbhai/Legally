@@ -1,6 +1,6 @@
 from django.urls import path
-from . import views
+from .views import query_legal_info
 
 urlpatterns = [
-    path('query/', views.legal_query, name='legal_query')
+    path('query-legal-info/', query_legal_info, name='query_legal_info'),
 ]

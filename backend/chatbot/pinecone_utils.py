@@ -1,21 +1,30 @@
-import pinecone
-from legal_chatbot.settings import PINECONE_API_KEY, PINECONE_ENV
-from langchain.embeddings import HuggingFaceEmbeddings
+from pinecone import Pinecone
+from legal_chatbot.settings import PINECONE_API_KEY
 
-# Initialize Pinecone
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
-index = pinecone.Index("legal-knowledge")
 
-# Embeddings model (use the same one for querying and storing)
-embeddings_model = HuggingFaceEmbeddings(model_name="lisa/legal-bert-squad-law")
+# Set your Pinecone API key
+api_key = PINECONE_API_KEY
 
-# Store legal cases in Pinecone
-def store_legal_case(case_text, case_id):
-    embedding = embeddings_model(case_text)
-    index.upsert(vectors=[{"id": case_id, "values": embedding}])
+# Create an instance of the Pinecone class
+pc = Pinecone(
+    api_key=api_key
+)
+def query_legal_cases(query_vector, index_name='my-index'):
+    """
+    Queries the Pinecone index with the given query vector.
 
-# Query Pinecone for relevant legal cases
-def query_legal_cases(query_text):
-    query_embedding = embeddings_model(query_text)
-    results = index.query(queries=[query_embedding], top_k=5)
+    :param query_vector: The vector representation of the query text.
+    :param index_name: The name of the Pinecone index to query.
+    :return: The top 5 results from the Pinecone index.
+    """
+    # Ensure the index exists
+    if index_name not in [index.name for index in pc.list_indexes()]:
+        raise ValueError(f"Index '{index_name}' does not exist.")
+
+    # Connect to the index
+    index = pc.index(index_name)
+
+    # Perform the query
+    results = index.query(vector=query_vector, top_k=5)
+
     return results
